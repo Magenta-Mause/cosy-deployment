@@ -30,7 +30,7 @@ spec:
                   name: cosy-postgresql-credentials
                   key: postgresql-password
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://cosy-postgresql:5432/cosy
+              value: jdbc:postgresql://cosy-database-postgresql:5432/cosy
           resources:
             limits:
               memory: "512Mi"
