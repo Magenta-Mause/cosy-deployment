@@ -18,6 +18,19 @@ spec:
           image: ghcr.io/magenta-mause/cosy-backend:latest
           ports:
             - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+              secretKeyRef:
+                name: cosy-postgresql-credentials
+                key: postgresql-username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-postgresql-credentials
+                  key: postgresql-password
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://cosy-postgresql:5432/cosy
           resources:
             limits:
               memory: "512Mi"

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cosy-postgresql
+spec:
+  project: cosy
+  source:
+    repoURL: https://github.com/Magenta-Mause/cosy-deploy
+    targetRevision: HEAD
+    path: database
+    helm:
+      releaseName: cosy-postgresql
+      valuesFiles:
+        - postgresql-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cosy-backend
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      enabled: true

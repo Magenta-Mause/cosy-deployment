@@ -1,0 +1,12 @@
+global:
+  storageClass: "standard"  # optional: adjust to your cluster
+auth:
+  existingSecret: cosy-postgresql-credentials
+  existingSecretUsernameKey: postgresql-username
+  existingSecretPasswordKey: postgresql-password
+  database: cosy
+primary:
+  persistence:
+    enabled: true
+    size: 5Gi
+
