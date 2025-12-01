@@ -12,7 +12,7 @@ spec:
       releaseName: cosy-postgresql
       values: |
         global:
-          storageClass: "standard"  # optional: adjust to your cluster
+          storageClass: "standard" 
         auth:
           existingSecret: cosy-postgresql-credentials
           existingSecretUsernameKey: postgresql-username
