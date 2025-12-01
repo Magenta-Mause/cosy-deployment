@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cosy-postgresql
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://charts.bitnami.com/bitnami
+    chart: postgresql
+    targetRevision: 15.5.21  # stable version
+    helm:
+      values: |
+        global:
+          storageClass: standard
+
+        auth:
+          existingSecret: cosy-postgresql-credentials
+          existingSecretUsernameKey: postgresql-username
+          existingSecretPasswordKey: postgresql-password
+          database: cosy
+
+        primary:
+          persistence:
+            enabled: true
+            size: 10Gi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cosy
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

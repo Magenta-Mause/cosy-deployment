@@ -1,8 +1,0 @@
-apiVersion: v2
-name: cosy-database
-description: Wraps the bitnami/postgresql chart for the cosy project
-version: 0.1.0
-dependencies:
-  - name: postgresql
-    repository: https://charts.bitnami.com/bitnami
-    version: 18.1.13
