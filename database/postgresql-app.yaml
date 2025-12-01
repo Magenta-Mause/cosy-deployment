@@ -2,19 +2,20 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: cosy-postgresql
+  namespace: cosy
 spec:
   project: cosy
   source:
-    repoURL: https://github.com/Magenta-Mause/cosy-deploy
-    targetRevision: HEAD
-    path: database
+    repoURL: https://charts.bitnami.com/bitnami
+    chart: postgresql
+    targetRevision: 12.17.0
     helm:
       releaseName: cosy-postgresql
       valuesFiles:
         - postgresql-values.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: cosy-backend
+    namespace: cosy
   syncPolicy:
     automated:
       prune: true
