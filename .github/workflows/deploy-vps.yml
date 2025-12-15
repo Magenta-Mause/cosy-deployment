@@ -1,0 +1,50 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docker/docker-compose.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout deployment repo
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Ansible
+        run: |
+          pip install ansible
+          ansible-galaxy collection install community.docker
+          
+      - name: Create SSH directory
+        run: mkdir -p ~/.ssh
+        
+      - name: Add SSH key
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/github_deploy
+          chmod 600 ~/.ssh/github_deploy
+          
+      - name: Update inventory with VPS IP
+        run: |
+          sed -i "s/YOUR_VPS_IP_HERE/${{ secrets.VPS_HOST }}/" ansible/inventory.yml
+          
+      - name: Run Ansible deployment
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd ansible
+          ansible-playbook deploy-docker.yml -v
+          
+      - name: Deployment summary
+        run: echo "✅ Deployment to VPS completed successfully!"
