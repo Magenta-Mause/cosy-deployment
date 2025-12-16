@@ -2,6 +2,10 @@
 
 This repository contains the deployment configurations for the internal Cosy test environments. It includes configurations for both run-modes:  Kubernetes and Docker Compose.
 
+## CI/CD Deployment Flow
+
+![CI/CD Pipeline Visualization](assets/cosy-cicd.drawio.png)
+
 ## Project Structure
 
 *   **`kubernetes/`**: Contains all Kubernetes deployment configurations for the Cosy application, including deployments, services, ingresses, and database setup.
