@@ -6,6 +6,7 @@ This repository contains the deployment configurations for the internal Cosy tes
 
 *   **`kubernetes/`**: Contains all Kubernetes deployment configurations for the Cosy application, including deployments, services, ingresses, and database setup.
 *   **`docker/`**: Contains Docker Compose configurations and related files for running the Cosy application using Docker.
+*   **`assets/`**: Contains deployment flow visualizations and diagrams (see `cosy_cicd.drawio` for CI/CD pipeline visualization).
 
 ## Getting Started
 
