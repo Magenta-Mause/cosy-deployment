@@ -2,12 +2,12 @@ all:
   hosts:
     vps:
       # Use your VPS IP address
-      ansible_host: YOUR_VPS_IP_HERE
+      ansible_host: 80.158.76.109
       
       # For first run, use root user (or your initial user)
-      ansible_user: root
+      ansible_user: ubuntu
       
-      # For first run with password authentication
-      # You'll be prompted for password with --ask-pass
+      # Use SSH key authentication
+      ansible_ssh_private_key_file: ~/.ssh/ecs-key.pem
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
       ansible_python_interpreter: /usr/bin/python3

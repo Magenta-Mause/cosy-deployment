@@ -7,7 +7,7 @@ This guide walks you through setting up a fresh VPS for deploying Cosy with ngin
 - A fresh Ubuntu/Debian VPS (20.04 or newer)
 - Root SSH access to the VPS
 - A domain name pointed to your VPS IP
-- Ansible installed locally: `pip install ansible`
+- Ansible installed locally: `sudo apt install ansible`
 
 ## Quick Setup
 
@@ -33,8 +33,7 @@ export DEPLOY_USER_PASSWORD="your-secure-password-here"  # Optional, will prompt
 
 Edit `ansible/inventory-setup.yml`:
 ```yaml
-ansible_host: 80.158.76.109  # Replace with your VPS IP
-```
+ansible_host: 80.158.76.109  # Replace with your VPS IP ```
 
 ### 4. Run Setup Playbook
 

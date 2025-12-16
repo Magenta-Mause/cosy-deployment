@@ -53,7 +53,7 @@
         password: "{{ deploy_user_password | password_hash('sha512') }}"
         shell: /bin/bash
         create_home: yes
-        groups: sudo,docker
+        groups: sudo
         append: yes
       
     - name: Create .ssh directory for deploy user
@@ -111,6 +111,12 @@
         url: https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64
         dest: /usr/local/bin/docker-compose
         mode: '0755'
+    
+    - name: Add deploy user to docker group
+      user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: yes
     
     # Firewall Configuration
     - name: Configure UFW defaults
@@ -194,15 +200,21 @@
         group: "{{ deploy_user }}"
         mode: '0755'
     
+    # SSL Certificate
+    - name: Check if SSL certificate exists
+      stat:
+        path: /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem
+      register: ssl_cert
+    
     # Nginx Configuration
     - name: Remove default nginx site
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
     
-    - name: Create nginx config for Cosy
+    - name: Create initial HTTP-only nginx config
       template:
-        src: nginx-cosy.conf.j2
+        src: "{{ 'nginx-cosy.conf.j2' if ssl_cert.stat.exists else 'nginx-cosy-http.conf.j2' }}"
         dest: /etc/nginx/sites-available/cosy
         mode: '0644'
       notify: restart nginx
@@ -218,11 +230,11 @@
       command: nginx -t
       changed_when: false
     
-    # SSL Certificate
-    - name: Check if SSL certificate exists
-      stat:
-        path: /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem
-      register: ssl_cert
+    - name: Start nginx if not running
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
     
     - name: Obtain SSL certificate
       command: >
@@ -230,6 +242,14 @@
         --non-interactive --agree-tos
         --email {{ letsencrypt_email }}
         --redirect
+      when: not ssl_cert.stat.exists
+      notify: restart nginx
+    
+    - name: Update to full HTTPS nginx config after SSL
+      template:
+        src: nginx-cosy.conf.j2
+        dest: /etc/nginx/sites-available/cosy
+        mode: '0644'
       when: not ssl_cert.stat.exists
       notify: restart nginx
     
