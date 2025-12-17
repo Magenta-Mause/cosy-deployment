@@ -339,9 +339,25 @@
       args:
         chdir: /opt/cosy
 
-    - name: Display generated secrets for GitHub
+    - name: Display secrets and required GitHub configuration
       debug:
-        msg: "Please add the following as GitHub Repository Secrets to your repository (Settings -> Secrets and variables -> Actions):\n  Name: POSTGRES_USER, Value: {{ postgres_user }}\n  Name: POSTGRES_PASSWORD, Value: {{ postgres_password }}"
+        msg:
+          - "========================================================================"
+          - "IMPORTANT: Initial setup is complete. Please configure your GitHub repository secrets."
+          - "(Go to Settings -> Secrets and variables -> Actions)"
+          - ""
+          - "Secrets required for the 'Deploy to VPS' GitHub workflow:"
+          - "----------------------------------------------------------"
+          - "Name: VPS_HOST"
+          - "Value: {{ ansible_host }}"
+          - ""
+          - "Name: DEPLOY_USER"
+          - "Value: {{ deploy_user }}"
+          - ""
+          - "Name: VPS_SSH_KEY"
+          - "Value: (The content of the PRIVATE key you generated, e.g., '~/.ssh/cosy_deploy')"
+          - ""
+          - "========================================================================"
     
   handlers:
     - name: restart ssh
@@ -359,3 +375,4 @@
       systemd:
         name: nginx
         state: restarted
+
