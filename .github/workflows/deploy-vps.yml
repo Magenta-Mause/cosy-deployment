@@ -1,0 +1,54 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docker/docker-compose.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: 'Copy docker-compose.yml to VPS'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "docker/docker-compose.yml"
+          target: "/opt/cosy/"
+          strip_components: 1
+
+      - name: 'Deploy services on VPS'
+        uses: appleboy/ssh-action@v1.2.4
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/cosy
+            
+            echo "Pulling latest images..."
+            docker compose pull
+            
+            echo "Stopping and removing old containers and volumes..."
+            # Use 'down -v' to remove old containers and their volumes (deletes DB data)
+            docker compose down -v
+            
+            echo "Starting new containers..."
+            docker compose up -d
+            
+            echo "Cleaning up unused images..."
+            docker image prune -f
+            
+            echo "=== Deployment complete. Running containers: ==="
+            docker compose ps
+

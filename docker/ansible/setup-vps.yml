@@ -1,0 +1,378 @@
+# VPS Initial Setup Playbook
+# Creates deploy user, hardens SSH, installs Docker, sets up nginx with SSL
+# Run once: ansible-playbook -i inventory-setup.yml setup-vps.yml
+
+- name: Initial VPS Setup
+  hosts: vps
+  become: yes
+  
+  vars:
+    deploy_user: deploy
+    # Public SSH key for the deploy user (add yours here or pass via env)
+    deploy_user_ssh_key: "{{ lookup('env', 'DEPLOY_USER_SSH_KEY') }}"
+    
+    # Domain configuration
+    domain_name: "{{ lookup('env', 'COSY_DOMAIN') }}"
+    letsencrypt_email: "{{ lookup('env', 'LETSENCRYPT_EMAIL') }}"
+
+    # Generated secrets (a new password will be generated on every run)
+    # IMPORTANT: After the first run, save these to your GitHub Secrets.
+    postgres_user: cosy_user
+    postgres_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    
+  pre_tasks:
+    - name: Check for COSY_DOMAIN environment variable
+      fail:
+        msg: "The 'COSY_DOMAIN' environment variable is not set. Please set it to your domain name before running the playbook."
+      when: domain_name == ""
+
+    - name: Check for LETSENCRYPT_EMAIL environment variable
+      fail:
+        msg: "The 'LETSENCRYPT_EMAIL' environment variable is not set. Please set it to your Let's Encrypt email address."
+      when: letsencrypt_email == ""
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+    
+    - name: Install required packages
+      apt:
+        update_cache: yes
+        name:
+          - ufw
+          - unattended-upgrades
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+        state: present
+    
+    - name: Install pip
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+      register: fail2ban_install
+    
+    # User Setup
+    - name: Create deploy user
+      user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        create_home: yes
+        groups: sudo
+        append: yes
+      
+    - name: Create .ssh directory for deploy user
+      file:
+        path: /home/{{ deploy_user }}/.ssh
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0700'
+    
+    - name: Add SSH public key for deploy user
+      authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ deploy_user_ssh_key }}"
+        state: present
+      when: deploy_user_ssh_key != ""
+    
+    - name: Allow deploy user to sudo without password
+      lineinfile:
+        path: /etc/sudoers.d/{{ deploy_user }}
+        line: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: yes
+        mode: '0440'
+        validate: 'visudo -cf %s'
+    
+    # Docker Installation
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+    
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+    
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+    
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+    
+    - name: Install Docker Compose standalone
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+    
+    - name: Add deploy user to docker group
+      user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: yes
+    
+    # Firewall Configuration
+    - name: Configure UFW defaults
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+    
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+    
+    - name: Allow HTTP
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+    
+    - name: Allow HTTPS
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+    
+    - name: Enable UFW
+      ufw:
+        state: enabled
+    
+    # SSH Hardening
+    - name: Disable root login via SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: restart ssh
+    
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+      notify: restart ssh
+    
+    - name: Enable public key authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PubkeyAuthentication'
+        line: 'PubkeyAuthentication yes'
+        state: present
+      notify: restart ssh
+    
+    # Fail2Ban Configuration
+    - name: Configure fail2ban for SSH
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          bantime = 3600
+          findtime = 600
+          maxretry = 5
+          
+          [sshd]
+          enabled = true
+          port = 22
+          logpath = /var/log/auth.log
+        mode: '0644'
+      notify: restart fail2ban
+      when: fail2ban_install is succeeded
+    
+    # Create deployment directory
+    - name: Create deployment directory
+      file:
+        path: /opt/cosy
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+    
+    # SSL Certificate
+    - name: Check if SSL certificate exists
+      stat:
+        path: /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem
+      register: ssl_cert
+    
+    # Nginx Configuration
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+    
+    - name: Create initial HTTP-only nginx config
+      template:
+        src: "{{ 'nginx-cosy.conf.j2' if ssl_cert.stat.exists else 'nginx-cosy-http.conf.j2' }}"
+        dest: /etc/nginx/sites-available/cosy
+        mode: '0644'
+      notify: restart nginx
+    
+    - name: Enable Cosy nginx site
+      file:
+        src: /etc/nginx/sites-available/cosy
+        dest: /etc/nginx/sites-enabled/cosy
+        state: link
+      notify: restart nginx
+    
+    - name: Test nginx configuration
+      command: nginx -t
+      changed_when: false
+    
+    - name: Start nginx if not running
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+    
+    - name: Obtain SSL certificate
+      command: >
+        certbot --nginx -d {{ domain_name }}
+        --non-interactive --agree-tos
+        --email {{ letsencrypt_email }}
+        --redirect
+      when: not ssl_cert.stat.exists
+      notify: restart nginx
+    
+    - name: Update to full HTTPS nginx config after SSL
+      template:
+        src: nginx-cosy.conf.j2
+        dest: /etc/nginx/sites-available/cosy
+        mode: '0644'
+      when: not ssl_cert.stat.exists
+      notify: restart nginx
+    
+    - name: Setup SSL certificate auto-renewal
+      cron:
+        name: "Renew SSL certificates"
+        minute: "0"
+        hour: "3"
+        job: "certbot renew --quiet --post-hook 'systemctl reload nginx'"
+    
+    # Automatic Security Updates
+    - name: Configure unattended upgrades
+      copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}-security";
+          };
+          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+          Unattended-Upgrade::MinimalSteps "true";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+          Unattended-Upgrade::Automatic-Reboot "false";
+        mode: '0644'
+    
+    - name: Enable automatic security updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+    
+    # System limits for Docker
+    - name: Set system limits for containers
+      lineinfile:
+        path: /etc/security/limits.conf
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "* soft nofile 65536"
+        - "* hard nofile 65536"
+
+    # Docker Compose Setup
+    - name: Copy docker-compose file to deployment directory
+      copy:
+        src: ../docker-compose.yml
+        dest: /opt/cosy/docker-compose.yml
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0644'
+
+    - name: Create .env file with secrets
+      template:
+        src: templates/env.j2
+        dest: /opt/cosy/.env
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+
+    - name: Start Docker Compose services
+      command: docker compose up -d
+      args:
+        chdir: /opt/cosy
+
+    - name: Display secrets and required GitHub configuration
+      debug:
+        msg:
+          - "========================================================================"
+          - "IMPORTANT: Initial setup is complete. Please configure your GitHub repository secrets."
+          - "(Go to Settings -> Secrets and variables -> Actions)"
+          - ""
+          - "Secrets required for the 'Deploy to VPS' GitHub workflow:"
+          - "----------------------------------------------------------"
+          - "Name: VPS_HOST"
+          - "Value: {{ ansible_host }}"
+          - ""
+          - "Name: DEPLOY_USER"
+          - "Value: {{ deploy_user }}"
+          - ""
+          - "Name: VPS_SSH_KEY"
+          - "Value: (The content of the PRIVATE key you generated, e.g., '~/.ssh/cosy_deploy')"
+          - ""
+          - "========================================================================"
+    
+  handlers:
+    - name: restart ssh
+      systemd:
+        name: sshd
+        state: restarted
+    
+    - name: restart fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted
+      when: fail2ban_install is succeeded
+    
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
